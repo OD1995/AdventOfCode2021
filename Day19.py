@@ -310,7 +310,7 @@ def work_out_scanner_dists(I,A):
     return actual_dists
 
 
-R,D = get_dist_between_all_points(I)
-A = match_points_together(R)
-B = work_out_scanner_dists(I,A)
-a = 1
+# R,D = get_dist_between_all_points(I)
+# A = match_points_together(R)
+# B = work_out_scanner_dists(I,A)
+# a = 1
