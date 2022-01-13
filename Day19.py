@@ -1,157 +1,14 @@
-import math
+# from Day19 import I
+import requests
 
-input_str = """
---- scanner 0 ---
-404,-588,-901
-528,-643,409
--838,591,734
-390,-675,-793
--537,-823,-458
--485,-357,347
--345,-311,381
--661,-816,-575
--876,649,763
--618,-824,-621
-553,345,-567
-474,580,667
--447,-329,318
--584,868,-557
-544,-627,-890
-564,392,-477
-455,729,728
--892,524,684
--689,845,-530
-423,-701,434
-7,-33,-71
-630,319,-379
-443,580,662
--789,900,-551
-459,-707,401
+input_url = "https://adventofcode.com/2021/day/19/input"
+session_id = "53616c7465645f5f64fad645943322b17c0e835504cd0c16c1d75b618f8a779116374784d0374c261cf68fabbb5e30ec"
 
---- scanner 1 ---
-686,422,578
-605,423,415
-515,917,-361
--336,658,858
-95,138,22
--476,619,847
--340,-569,-846
-567,-361,727
--460,603,-452
-669,-402,600
-729,430,532
--500,-761,534
--322,571,750
--466,-666,-811
--429,-592,574
--355,545,-477
-703,-491,-529
--328,-685,520
-413,935,-424
--391,539,-444
-586,-435,557
--364,-763,-893
-807,-499,-711
-755,-354,-619
-553,889,-390
-
---- scanner 2 ---
-649,640,665
-682,-795,504
--784,533,-524
--644,584,-595
--588,-843,648
--30,6,44
--674,560,763
-500,723,-460
-609,671,-379
--555,-800,653
--675,-892,-343
-697,-426,-610
-578,704,681
-493,664,-388
--671,-858,530
--667,343,800
-571,-461,-707
--138,-166,112
--889,563,-600
-646,-828,498
-640,759,510
--630,509,768
--681,-892,-333
-673,-379,-804
--742,-814,-386
-577,-820,562
-
---- scanner 3 ---
--589,542,597
-605,-692,669
--500,565,-823
--660,373,557
--458,-679,-417
--488,449,543
--626,468,-788
-338,-750,-386
-528,-832,-391
-562,-778,733
--938,-730,414
-543,643,-506
--524,371,-870
-407,773,750
--104,29,83
-378,-903,-323
--778,-728,485
-426,699,580
--438,-605,-362
--469,-447,-387
-509,732,623
-647,635,-688
--868,-804,481
-614,-800,639
-595,780,-596
-
---- scanner 4 ---
-727,592,562
--293,-554,779
-441,611,-461
--714,465,-776
--743,427,-804
--660,-479,-426
-832,-632,460
-927,-485,-438
-408,393,-506
-466,436,-512
-110,16,151
--258,-428,682
--393,719,612
--211,-452,876
-808,-476,-593
--575,615,604
--485,667,467
--680,325,-822
--627,-443,-432
-872,-547,-609
-833,512,582
-807,604,487
-839,-516,451
-891,-625,532
--652,-548,-490
-30,-46,-14
-"""
-
-# input_str = """
-# --- scanner 0 ---
-# 0,2
-# 4,1
-# 3,3
-
-# --- scanner 1 ---
-# -1,-1
-# -5,0
-# -2,1
-# """
-
-
+input_req = requests.get(
+    url=input_url,
+    cookies={"session":session_id}
+)
+input_str = input_req.text
 I = {}
 for s in input_str.split("\n\n"):
     if s[0] == "\n":
@@ -169,148 +26,306 @@ for s in input_str.split("\n\n"):
             )
     I[key] = value
 
-a=1
 
-def get_diff_orders(X):
-    return [
-        tuple([X[0],X[1],X[2]]),
-        tuple([X[0],X[2],X[1]]),
-        tuple([X[1],X[0],X[2]]),
-        tuple([X[1],X[2],X[0]]),
-        tuple([X[2],X[0],X[1]]),
-        tuple([X[2],X[1],X[0]]),
-    ]
+# with open(r"C:\Users\Oli\Documents\Python\AdventOfCode\answer.txt", 'r') as file:
+#     data = file.read()
+# ANSWERS = [
+#     list(map(int, x.split(",")))
+#     for x in data.split("\n")
+# ]
 
-def get_dist_between_points(a,b):
+class Scanner:
+
+    def __init__(self,scannerID,beacon_list):
+        self.scannerID = scannerID
+        ## Direction relative to scanner 0
+        ##    1 is same direction, -1 is opposite direction
+        self.direction_ix = 0
+        self.direction_final = True if scannerID == 0 else False
+        self.direction_options = [
+            [1,1,1],
+            [-1,1,1],
+            [1,-1,-1],
+            [-1,1,-1],
+            [-1,-1,1],
+            [1,1,-1],
+            [1,-1,1],
+            [-1,-1,-1],
+        ]
+        ## Dimension relative to scanner 0
+        ##    [0,1,2] -> same dimensions as scanner 0
+        ##    [2,1,0] -> x & z dimensions swapped comapred to scanner 0
+        self.dimension_ix = 0
+        self.dimension_final = True if scannerID == 0 else False
+        self.dimension_options = [
+            [0,1,2],
+            [0,2,1],
+            [1,0,2],
+            [1,2,0],
+            [2,0,1],
+            [2,1,0]
+        ]
+        self.beacon_list = beacon_list
+        self.coord_diffs = {}
+        self.cd_final = True if scannerID == 0 else False
+        self.next_change = 'direction'
+        ## Offset from scanner 0
+        self.offset = [0,0,0]
+        self.done = True if scannerID == 0 else False
+        if scannerID == 0:
+            self.get_coord_diffs()
+
+    def change_d_or_d(self):
+        if self.next_change == 'direction':
+            result1 = self.change_direction()
+            # print('dir change')
+            if not result1:
+                # print('fail')
+                result2 = self.change_dimension()
+                # print('dim change')
+                self.next_change = 'direction'
+                if not result2:
+                    raise ValueError('this should never happen')
+            if self.direction_ix == len(self.direction_options) - 1:
+                self.next_change = 'dimension'
+        else:
+            result1 = self.change_direction()
+            result2 = self.change_dimension()
+            # print('dim change')
+            self.next_change = 'direction'
+            if not result2:
+                raise ValueError('this should never happen')
+    
+    def change_direction(self):
+        if self.direction_final or (self.direction_ix == len(self.direction_options) - 1):
+            if self.direction_ix == len(self.direction_options) - 1:
+                self.direction_ix = 0
+            return False
+        else:
+            self.direction_ix += 1
+            return True
+
+    def change_dimension(self):
+        if self.dimension_final or (self.dimension_ix == len(self.dimension_options) - 1):
+            if self.dimension_ix == len(self.dimension_options) - 1:
+                self.dimension_ix = 0
+            return False
+        else:
+            self.dimension_ix += 1
+            return True
+
+    def get_coord_diffs(self):
+        for i,x in enumerate(self.beacon_list):
+            for j,y in enumerate(self.beacon_list):
+                if j != i:
+                    diff = [
+                        (x[k] - y[k]) * self.get_direction(k)
+                        # x[k] - (self.direction_options[self.direction_ix][k] * y[k])
+                        for k in self.get_dimension()
+                    ]
+                    if tuple(diff) not in self.coord_diffs:
+                        self.coord_diffs[tuple(diff)] = [(i,j)]
+                    else:
+                        self.coord_diffs[tuple(diff)].append((i,j))
+    
+    def get_dimension(self,ix=None):
+        if ix is None:
+            return self.dimension_options[self.dimension_ix]
+        else:
+            return self.dimension_options[self.dimension_ix][ix]
+
+    def get_direction(self,ix=None):
+        if ix is None:
+            return self.direction_options[self.direction_ix]
+        else:
+            return self.direction_options[self.direction_ix][ix]
+    
+    def set_offset(self,new_offset):
+        self.offset = new_offset
+        self.done = True
+        self.get_coord_diffs()
+
+    def reset_ixs(self):
+        self.dimension_ix = 0
+        self.direction_ix = 0
+
+    def add_beacons(self,scanner):#,ANSWERS):
+        dimensions = scanner.get_dimension()
+        # directions = scanner.get_direction()
+        for b in scanner.beacon_list:
+            nb = []
+            for ix in range(3):
+                # dim = dimensions.index(ix)
+                dim = scanner.get_dimension(ix)
+                dir = scanner.get_direction(dim)
+                # val = (b[dim] * dir) + scanner.offset[dim]
+                # val = (b[dim] - scanner.offset[ix]) * dir
+                val = (b[dim] * dir) + scanner.offset[ix]
+                nb.append(val)
+            if nb not in self.beacon_list:
+                self.beacon_list.append(nb)
+                # if nb in ANSWERS:
+                #     self.beacon_list.append(nb)
+                # else:
+                #     a=1
+        self.get_coord_diffs()
+
+def get_coord_diff_matches(scanner,scanner0_cd):
+    matches = []
+    for i,x in enumerate(scanner.beacon_list):
+        for j,y in enumerate(scanner.beacon_list):
+            if j != i:
+                # if (i==5)&(j==16)&(scanner.direction_ix==1)&(scanner.dimension_ix==3)&(scanner.scannerID==4):
+                #     a=1
+                diff = []
+                for k in scanner.get_dimension():
+                    val = (x[k] - y[k]) * scanner.get_direction(k)
+                    diff.append(val)
+                if tuple(diff) in scanner0_cd:
+                    matches.append([(i,j),scanner0_cd[tuple(diff)]])
+    return matches
+
+def flatten(x):
     rm = []
-    d ={}
-    for i,(a1,b1) in enumerate(zip(a,b)):
-        d[i] = [a1+b1,b1-a1,a1-b1]
-    for x in d[0]:
-        for y in d[1]:
-            for z in d[2]:
-                rm.append(tuple([x,y,z]))
-    RM = []
-    for x in rm:
-        RM.extend(get_diff_orders(x))
-    return RM
-
-def get_dist_between_points2(a,b):
-    rm = []
-    for a1,b1 in zip(a,b):
-        plus = a1+b1
-        minus = a1-b1
-        rm.append([(plus,"+"),(minus,"-")])
+    for sublist in x:
+        for item in sublist:
+            rm.append(item)
     return rm
 
-def get_dist_between_all_points(I):
-    R = {}
-    D = {}
-    for Ik,Iv in I.items():
-        done = {}
-        for i,x in enumerate(Iv):
-            for j,y in enumerate(Iv):
-                if i != j:
-                    ordered = tuple(sorted([i,j]))
-                    if ordered not in done:
-                        r_list = get_dist_between_points(x,y)
-                        for r in r_list:
-                            if r in R:
-                                if r in D:
-                                    D[r].append((Ik,i,j))
-                                else:
-                                    D[r] = R[r] + [(Ik,i,j)]
-                                R[r].append((Ik,i,j))
-                            else:
-                                R[r] = [(Ik,i,j)]
-                            done[ordered] = 1
-    return R,D
-
-def match_points_together(D):
-    ors = {}
-    iss = {}
-    for k,vs in D.items():
-        for i,v in enumerate(vs):
-            for j in [1,2]:
-                key = (v[0],v[j])
-                for k,m in enumerate(vs):
-                    if k != i:
-                        val = (m[1],m[2])
-                        if key not in ors:
-                            ors[key] = {m[0] : [val]}
-                        elif m[0] not in ors[key]:
-                            ors[key][m[0]] = [val]
-                        else:
-                            ors[key][m[0]].append(val)
-    for k in list(ors.keys()):
-        if k in ors:
-            for scannerID,options in ors[k].items():
-                if scannerID != k[0]:
-                    for i,option in enumerate(options):
-                        for opt in option:
-                            in_each = [
-                                opt in T
-                                for ix,T in enumerate(options)
-                                if ix != i
-                            ]
-                            if all(in_each):
-                                if k in iss:
-                                    iss[k][scannerID] = opt
-                                else:
-                                    iss[k] = {scannerID : opt}
-                                continue
-    return iss
-
-def get_combo_count(n,k=2):
-    return math.factorial(n)/(math.factorial(k)*math.factorial(n-k))
-
-def gcc(I):
-    total = 0
-    for v in I.values():
-        total += get_combo_count(len(v))
-    return total
-
-
-def get_all_combos(L):
-    rm = []
-    for p in L:
-        for q in L:
-            if q > p:
-                rm.append((p,q))
-    return {x:[] for x in rm}
-
-def work_out_scanner_dists(I,A):
-    all_combos = get_all_combos(I.keys())
-    for (scannerID,beaconIX),dicto in A.items():
-        for scannerID2,beaconIX2 in dicto.items():
-            if scannerID < scannerID2:
-                all_combos[(scannerID,scannerID2)].append(
-                    (I[scannerID][beaconIX],I[scannerID2][beaconIX2])
-        )
-    dists = {}
-    for scanners,L in all_combos.items():
-        for pair in L:
-            r = get_dist_between_points2(*pair)
-            if scanners not in dists:
-                dists[scanners] = {}
-            for ix,M in enumerate(r):
-                if ix not in dists[scanners]:
-                    dists[scanners][ix] = {}
-                for m in M:
-                    if m not in dists[scanners][ix]:
-                        dists[scanners][ix][m] = 1
-                    else:
-                        dists[scanners][ix][m] += 1
-    actual_dists = {}
-    for scanners,dicto1 in dists.items():
-        answer = []
-        for i in range(len(dicto1)):
-            answer.append(max(dicto1[i],key=dicto1[i].get))
-        actual_dists[scanners] = answer            
-    return actual_dists
+def get_d_and_d(scanners,i,scanner0_cd,base_scanner_ix):
+    scanner = scanners[i]
+    scanner.reset_ixs()
+    matches = []
+    j = 1
+    matchups = {}
+    if i == 4:
+        a=1
+    while True:
+        # print(i,scanner.dimension_ix,scanner.direction_ix,scanner.next_change)
+        matches = get_coord_diff_matches(scanner,scanner0_cd)
+        if len(matches) == 0:
+            scanner.change_d_or_d()
+            continue
+        j += 1
+        matchups = {}
+        for match in matches:
+            for beacon_ix in match[0]:
+                if beacon_ix not in matchups:
+                    matchups[beacon_ix] = flatten(match[1])
+                else:
+                    matchups[beacon_ix].extend(flatten(match[1]))
+        if len(matchups) < 12:
+            scanner.change_d_or_d()
+            continue
+        # assert len(matchups) >= 12
+        answers = {
+            # k : max(set(v),key=v.count)
+            # for k,v in matchups.items()
+        }
+        offsets = []
+        dimensions = scanner.get_dimension()
+        directions = scanner.get_direction()
+        A=[]
+        B=[]
+        for this_scanner_beacon_ix,scanner0_beacon_ix_list in matchups.items():
+            most_common_scanner0_ix = max(
+                set(scanner0_beacon_ix_list),
+                key=scanner0_beacon_ix_list.count
+            )
+            answers[this_scanner_beacon_ix] = most_common_scanner0_ix
+            sc0_beacon = scanners[0].beacon_list[most_common_scanner0_ix]
+            A.append(sc0_beacon)
+            sc_beacon = scanner.beacon_list[this_scanner_beacon_ix]
+            B.append(sc_beacon)
+            offset = []
+            for ixx,(d0,d1) in enumerate(zip(scanners[0].get_dimension(),dimensions)):
+                # ofs = sc_beacon[d] - (directions[d] * sc0_beacon[d])
+                # ofs = sc0_beacon[d0] + (directions[d0] * sc_beacon[d1])
+                iyy = scanner.get_dimension(ixx)
+                ofs = sc0_beacon[d0] - (scanner.get_direction(iyy) * sc_beacon[d1])
+                # if directions[d1] == -1:
+                #     ofs = sc0_beacon[d0] + sc_beacon[d1]
+                # elif directions[d1] == 1:
+                #     ofs = sc0_beacon[d0] - sc_beacon[d1]
+                offset.append(ofs)
+            offsets.append(tuple(offset))
+        offsets_set = set(offsets)
+        # if i in [2,4]:
+        #     a=1
+        if len(offsets_set) != 1:
+            scanner.change_d_or_d()
+            continue
+        scanner_offset = [
+            x+y
+            for x,y in zip(scanners[base_scanner_ix].offset,offsets_set.pop())
+        ]
+        scanner.set_offset(scanner_offset)
+        return scanner
+    raise ValueError('nope, this didn''t work')
 
 
-# R,D = get_dist_between_all_points(I)
-# A = match_points_together(R)
-# B = work_out_scanner_dists(I,A)
-# a = 1
+scanners = {
+    ik : Scanner(ik,iv)
+    for ik,iv in I.items()
+}
+
+# for base_scanner_ix in range(len(scanners)-1):
+#     base_scanner = scanners[base_scanner_ix]
+#     if not base_scanner.done:
+#         continue
+
+#     scanner0_cd = base_scanner.coord_diffs
+
+#     for i in range(base_scanner_ix+1,len(scanners)):
+#         if scanners[i].done:
+#             continue
+#         try:
+#             scanner = get_d_and_d(scanners,i,scanner0_cd,base_scanner_ix)
+#             scanners[i] = scanner
+#             print(base_scanner_ix,'->',i,'done')
+#         except ValueError:
+#             print(base_scanner_ix,'->',i,'not done')
+def do_it(scanners):#,ANSWERS):
+    base_scanner_ix = 0
+    for i in range(1,len(scanners)):
+        base_scanner = scanners[base_scanner_ix]
+        scanner0_cd = base_scanner.coord_diffs
+        if scanners[i].done:
+            continue
+        try:
+            scanner = get_d_and_d(scanners,i,scanner0_cd,base_scanner_ix)
+            scanners[i] = scanner
+            scanners[base_scanner_ix].add_beacons(scanner)#,ANSWERS)
+            print(base_scanner_ix,'->',i,'done')
+            print(len(scanners[base_scanner_ix].beacon_list))
+        except ValueError:
+            print(base_scanner_ix,'->',i,'not done')
+    return scanners
+not_all_done = True
+ct = 0
+while not_all_done:
+    scanners = do_it(scanners)#,ANSWERS)
+    not_all_done = all(
+        [
+            x.done
+            for x in scanners.values()
+        ]
+    ) == False
+    ct += 1
+    # if ct > 5:
+    #     break
+a=1
+
+def measure_distance(sc1,sc2):
+    rm = 0
+    for o1,o2 in zip(sc1.offset,sc2.offset):
+        rm += abs(o1 - o2)
+    return rm
+## 12370 is too low
+max_dist = 0
+for i,sc1 in scanners.items():
+    for j,sc2 in scanners.items():
+        if j > i:
+            dist = measure_distance(sc1,sc2)
+            max_dist = max(dist,max_dist)
+print('dist:',max_dist)
