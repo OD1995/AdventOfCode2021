@@ -1,25 +1,27 @@
 import requests
 
 input_url = "https://adventofcode.com/2021/day/22/input"
-session_id = "53616c7465645f5f64fad645943322b17c0e835504cd0c16c1d75b618f8a779116374784d0374c261cf68fabbb5e30ec"
+# session_id = "53616c7465645f5f64fad645943322b17c0e835504cd0c16c1d75b618f8a779116374784d0374c261cf68fabbb5e30ec"
+session_id = "53616c7465645f5faeaf13fc6dcd3e38df66fca5d647008cf8a894f8ba98eee32168b9129b17b007b8526d8b4b0abb42"
 
 input_req = requests.get(
     url=input_url,
     cookies={"session":session_id}
 )
-
-input_str = """
+if True:
+    input_str = """
 on x=10..12,y=10..12,z=10..12
 on x=11..13,y=11..13,z=11..13
 off x=9..11,y=9..11,z=9..11
 on x=10..10,y=10..10,z=10..10
+off x=9..11,y=9..11,z=9..11
 """
-# off x=0..0,y=0..0,z=0..0
-input_str = """
+if True:
+    # off x=0..0,y=0..0,z=0..0
+    input_str = """
 on x=-20..26,y=-36..17,z=-47..7
 on x=-20..33,y=-21..23,z=-26..28
 on x=-22..28,y=-29..23,z=-38..16
-off x=0..1,y=0..1,z=0..1
 on x=-46..7,y=-6..46,z=-50..-1
 on x=-49..1,y=-3..46,z=-24..28
 on x=2..47,y=-22..22,z=-23..27
@@ -40,7 +42,8 @@ on x=-41..9,y=-7..43,z=-33..15
 on x=-54112..-39298,y=-85059..-49293,z=-27449..7877
 on x=967..23432,y=45373..81175,z=27513..53682
 """
-input_str = """on x=-5..47,y=-31..22,z=-19..33
+if True:
+    input_str = """on x=-5..47,y=-31..22,z=-19..33
 on x=-44..5,y=-27..21,z=-14..35
 on x=-49..-1,y=-11..42,z=-10..38
 on x=-20..34,y=-40..6,z=-44..1
@@ -107,7 +110,7 @@ off x=-93533..-4276,y=-16170..68771,z=-104985..-24507
 # on x=-5..34,y=-31..6,z=-19..1
 # """
 
-# input_str = input_req.text
+input_str = input_req.text
 
 def get_to_from(k,part):
     if part == 1:
@@ -143,7 +146,7 @@ for i in input_str.split("\n"):
                 int(x)
                 for x in k.split("..")
             ]
-            _from_,_to_ = get_to_from(k,part=1)
+            _from_,_to_ = get_to_from(k,part=2)
             d[dim] = (_from_,_to_)
         instructions.append(d)
 # print('INSTRUCTIONS')
@@ -193,88 +196,104 @@ def check_overlap(cube,I):
         if (
             ((cube_from <= this_from) and (this_from <= cube_to))
             or
-             ((cube_from <= this_to) and (this_to <= cube_to))
+            ((cube_from <= this_to) and (this_to <= cube_to))
+            or
+            ((this_from <= cube_from) and (cube_from <= cube_to))
+            or
+            ((this_from <= cube_to) and (cube_to <= this_to))
         ):
             A[L] = (max(this_from,cube_from),min(this_to,cube_to))
         else:
             A[L] = False
     return A
 
-def do_it(instructions,OUTER,PRINT):
+def do_it(instructions,OUTER,PRINT,instruction_area=100000000000):
     # PRINT = True
     if PRINT:
         print('do_it',instructions)
+    if len(instructions) == 0:
+        return 0
     if len(instructions) == 1:
         if 'area' in instructions[0]:
             return instructions[0]['area']
-    on_cubes = []
-    off_cubes = []
+    other = {True:False,False:True}
+    on_cubes = {}
+    on_cubes_keys = []
+    off_cubes = {}
+    off_cubes_keys = []
     on_overlaps = {}
     off_overlaps = {}
+    first_overlaps = {}
+    overlaps = {}
+    instruction_areas = {}
     for i,I in enumerate(instructions):
-        # if I['on']:
-        ## Check if any overlap between this and others
-        for cube in on_cubes:
-            A = check_overlap(cube,I)
-            if all(A.values()):
-                area1 = get_area(A)
-                A['area'] = area1
-                A['on'] = True
-                if I['on']:
-                    if i in on_overlaps:
-                        # if not I['on']:
-                            # A['on'] = False
-                        on_overlaps[i].append(A)
-                    else:
-                        on_overlaps[i] = [A]
-                else:
-                    if i in off_overlaps:
-                        A['on'] = False
-                        off_overlaps[i].append(A)
-                    else:
-                        off_overlaps[i] = [A]
-        for cube2 in off_cubes:
-            B = check_overlap(cube2,I)
-            if all(B.values()):
-                area3 = get_area(B)
-                B['area'] = area3
-                B['on'] = True
-                if not I['on']:
-                    if i in off_overlaps:
-                        B['on'] = False
-                        off_overlaps[i].append(B)
-                    else:
-                        off_overlaps[i] = [B]
-
+        if i == 4:
+            a=1
+        L = []
+        for cube_ix in range(i):
+            if (i==4)&(cube_ix==3):
+                a=1
+            if cube_ix in on_cubes:
+                cube = on_cubes[cube_ix]
+                A = check_overlap(cube,I)
+                if all(A.values()):
+                    area1 = get_area(A)
+                    A['area'] = area1
+                    A['on'] = True
+                    L.append(A)
+            else:
+                cube2 = off_cubes[cube_ix]
+                B = check_overlap(cube2,I)
+                if all(B.values()):
+                    area3 = get_area(B)
+                    B['area'] = area3
+                    B['on'] = False
+                    L.append(B)
         area2 = get_area(I)
         I['area'] = area2
+        overlaps[i] = L
         if I['on']:
-            on_cubes.append(I)
+            on_cubes[i] = I
+            on_cubes_keys.append(i)
         else:
-            off_cubes.append(I)
-    on_sum = sum([x['area'] for x in on_cubes])
+            off_cubes[i] = I
+            off_cubes_keys.append(i)
+        instruction_areas[i] = get_area(I)
+    S = 0
+    for ix in range(len(instructions)):
+        if instructions[ix]['on']:
+            S += instruction_areas[ix] - do_it(overlaps[ix],False,False,instruction_area)
+        else:
+            S -= do_it(overlaps[ix],False,False)
+        if OUTER:
+            print(f"after step {ix}, S = {S}")
+        S = max(0,S)
+        S - min(instruction_area,S)
+
+
+    # on_sum = sum([x['area'] for x in on_cubes])
     # off_sum = sum([x['area'] for x in off_cubes])
-    S = on_sum #- off_sum
-    if PRINT:
-        print('S',S,OUTER)
-    # print('on_overlaps')
-    for k1,v1 in on_overlaps.items():
-        V = do_it(v1,False,PRINT)
-        # V = get_unique(v1)
-        if PRINT:
-            print(k1,v1,V,OUTER)
-        #print(V)
-        S -= V
-        # print('S',S)
-    # print('off_overlaps')
-    for k2,v2 in off_overlaps.items():
-        V2 = do_it(v2,False,PRINT)
-        # V = get_unique(v1)
-        if PRINT:
-            print(k2,v2,V2,OUTER)
-        #print(V)
-        S -= V2
-        # print('S',S)
+    # S = on_sum #- off_sum
+    # if PRINT:
+    #     print('S',S,OUTER)
+    # # print('on_overlaps')
+    # for k1,v1 in on_overlaps.items():
+    #     V = do_it(v1,False,PRINT)
+    #     # V = get_unique(v1)
+    #     if PRINT:
+    #         print(k1,v1,V,OUTER)
+    #     #print(V)
+    #     S -= V
+    #     # print('S',S)
+    # # print('off_overlaps')
+    # for k2,v2 in off_overlaps.items():
+    #     V2 = do_it(v2,False,PRINT)
+    #     # V = get_unique(v1)
+    #     if PRINT:
+    #         print(k2,v2,V2,OUTER)
+    #     #print(V)
+    #     S -= V2
+    #     # print('S',S)
     return S
 # print('on_overlaps')
 # for x,y in on_overlaps.items():
