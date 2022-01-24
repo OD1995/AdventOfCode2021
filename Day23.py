@@ -32,7 +32,6 @@ bedrooms = {
 }
 
 def display(hallway,bedrooms):
-    print("\n\n")
     print("#"*13)
     print("#" + "".join(hallway) + "#")
     b1 = [
@@ -46,6 +45,7 @@ def display(hallway,bedrooms):
     ]
     print("  #" + "#".join(b2) + "#")
     print("  " + "#"*9)
+    print("\n\n")
 
 def get_outside_br_ix(br):
     return ((br + 1) * 2)
@@ -77,6 +77,8 @@ def check_bedrooms(bedrooms):
     return "".join(a) != 'ABCDABCD'
 
 def move(from_details,hallway,bedrooms,moves,starting_b_ix,i):
+    if i == 5:
+        a=1
     letter_dict = {
         0 : 'A',
         1 : 'B',
@@ -93,22 +95,40 @@ def move(from_details,hallway,bedrooms,moves,starting_b_ix,i):
     result = get_empty_bedroom_ixs(bedrooms,True)
     if result:
         if from_details['type'] == 'b':
-            ## Unless the bed is the one above the one I'm supposed to be moving
-            if (result['b_ix'] == from_details['b_ix']) & (result['r_ix'] == from_details['r_ix'] - 1):
-                move_out_the_way = True
+            from_letter = bedrooms[from_details['b_ix']][from_details['r_ix']]
+        else:
+            from_letter = hallway[from_details['h_ix']]
+        to_letter = letter_dict[result['b_ix']]
+    # else:
+    #     from_letter = to_letter = True
+    if (result):
+        if (from_letter == to_letter):
+            if from_details['type'] == 'b':
+                ## Unless the bed is the one above the one I'm supposed to be moving
+                if (result['b_ix'] == from_details['b_ix']) & (result['r_ix'] == from_details['r_ix'] - 1):
+                    move_out_the_way = True
+                else:
+                    move_out_the_way = False
             else:
                 move_out_the_way = False
         else:
-            move_out_the_way = False
+            move_out_the_way = True
     else:
         move_out_the_way = True
     if move_out_the_way:
         ## Get ixs of the amphipods that I'm getting out the way for
         to_replace_ixs = get_replace_ixs(from_details['b_ix'],bedrooms,letter_dict)
-        ## Work out where to go most efficiently, to not get in the way of their route
-        mover = bedrooms[from_details['b_ix']][from_details['r_ix']]
-        eventual_b_dest = letter_dict_rev[mover]
-        to_details = get_most_efficent_evasion(from_details['b_ix'],to_replace_ixs,eventual_b_dest)
+        ## If the list is empty, the amphipod referenced in from_details is
+        ##    moving out of the way for the amphipod below it
+        if to_replace_ixs == []:
+            if from_details['r_ix'] == 1:
+                raise ValueError('this shouldnt happen')
+            to_details = get_most_efficient_unblocking(from_details,bedrooms,hallway)
+        else:
+            ## Work out where to go most efficiently, to not get in the way of their route
+            mover = bedrooms[from_details['b_ix']][from_details['r_ix']]
+            eventual_b_dest = letter_dict_rev[mover]
+            to_details = get_most_efficent_evasion(from_details['b_ix'],to_replace_ixs,eventual_b_dest)
     else:
         to_details = result
     ## Do the move
@@ -127,13 +147,15 @@ def move(from_details,hallway,bedrooms,moves,starting_b_ix,i):
                 from_details = {
                     'type' : 'b',
                     'b_ix' : to_replace_ixs[0],
-                    'r_ix' : 0
+                    'r_ix' : 0,
+                    'source' : 'A'
                 }
             else:
                 from_details = {
                     'type' : 'b',
                     'b_ix' : to_replace_ixs[0],
-                    'r_ix' : r_ix
+                    'r_ix' : r_ix,
+                    'source' : 'B'
                 }
         # else:
         #     ## Decide which one to do next
@@ -142,11 +164,37 @@ def move(from_details,hallway,bedrooms,moves,starting_b_ix,i):
         ## First, check if we're done
         not_done = check_bedrooms(bedrooms)
         if not_done:
-            from_details = get_from_details(bedrooms,starting_b_ix,hallway)
+            result2 = get_from_details(bedrooms,starting_b_ix,hallway)
+            if result2:
+                from_details = result2
+            else:
+                ## Letter is blocked in and needs getting out
+                from_details = get_blocker_out(bedrooms)
         else:
             from_details = {}
 
     return from_details,moves,hallway,bedrooms
+
+def get_most_efficient_unblocking(from_details,bedrooms,hallway):
+    ## Get letter we're unblocking for and work out where it needs to go
+    u = bedrooms[from_details['b_ix']][1]
+    ## Some logic for when they're all to the left
+    
+    ## Don't write logic for when they're on either side until we have an example
+    ## Raise error to catch that example
+
+def get_blocker_out(bedrooms):
+    # row0 = [bedrooms[b][0] for b in range(4)]
+    row1 = [bedrooms[b][1] for b in range(4)]
+    for i,L in enumerate(['A','B','C','D']):
+        if row1[i] != L:
+            return {
+                'type' : 'b',
+                'b_ix' : i,
+                'r_ix' : 0,
+                'source' : 'get_blocker_out'
+            }
+    raise ValueError('this shouldnt happen')
 
 def get_empty_to_be_filled(bedrooms,hallway,letter_dict):
     mts = []
@@ -163,7 +211,8 @@ def get_empty_to_be_filled(bedrooms,hallway,letter_dict):
     else:
         return {
             'type' : 'h',
-            'h_ix' : move_ix
+            'h_ix' : move_ix,
+            'source' : 'get_empty_to_be_filled'
         }
 
 def get_from_details(bedrooms,starting_b_ix,hallway):
@@ -188,12 +237,15 @@ def get_from_details(bedrooms,starting_b_ix,hallway):
         allowed_letters = get_allowed_letters(b,hallway_ixs)
         for r in range(2):
             if (bedrooms[b][r] not in [".",xp[b][r]]) & (bedrooms[b][r] in allowed_letters):
+                a=1
                 return {
                     'type' : 'b',
                     'b_ix' : b,
-                    'r_ix' : r
+                    'r_ix' : r,
+                    'source' : 'get_from_details'
                 }
-    raise ValueError('this shouldnt happen')
+    # raise ValueError('this shouldnt happen')
+    return False
 
 def get_allowed_letters(b,hallway_ixs):
     letter_dict = {
@@ -224,7 +276,7 @@ def get_allowed_letters(b,hallway_ixs):
                 allowed_letters.append(letter_dict[i])
         else:
             for i in range(b):
-                if max(left_ixs) < get_outside_br_ix(b):
+                if max(left_ixs) < get_outside_br_ix(i):
                     allowed_letters.append(letter_dict[i])
         ## Right
         right_ixs = [x for x in hallway_ixs if x > b_ix]
@@ -233,7 +285,7 @@ def get_allowed_letters(b,hallway_ixs):
                 allowed_letters.append(letter_dict[j])
         else:
             for j in range(b,4):
-                if min(right_ixs) > get_outside_br_ix(b):
+                if min(right_ixs) > get_outside_br_ix(i):
                     allowed_letters.append(letter_dict[j])
     elif b == 3:
         for k,v in letter_dict2.items():
@@ -247,52 +299,101 @@ def get_r_ix(bedrooms,my_ix,letter_dict,iix):
             return r
     raise ValueError('this shouldnt happen')
 
+def choose_quicker_route(options,start_pos,end_pos):
+    """
+    Work out which of the two routes below are shorter
+        start_pos -> option1 -> end_pos
+        start_pos -> option2 -> end_pos
+    All of the above are hallway indexes
+    """
+    routes = {}
+    for option in options:
+        routes[option] = abs(option - start_pos) + abs(end_pos - option)
+    return min(routes,key=routes.get)
+
 def get_most_efficent_evasion(my_b_ix,to_replace_ixs,eventual_b_dest):
-    eventual_direction = "left" if my_b_ix > eventual_b_dest else "right"
+    # if eventual_b_dest is not None:
+    #     eventual_direction = "left" if my_b_ix > eventual_b_dest else "right"
+    # else:
+    #     eventual_direction = 'n/a'
     if len(to_replace_ixs) == 2:
         ## If I'm in between them, move to the closest side
         if (to_replace_ixs[0] < my_b_ix) & (my_b_ix < to_replace_ixs[1]):
-            if my_b_ix < 2:
-                R = 'far left'
-            else:
-                R = 'far right'
+            # if my_b_ix < 2:
+            #     R = 'far left'
+            # else:
+            #     R = 'far right'
+            quicker_route = choose_quicker_route(
+                options=[1,9],
+                start_pos=get_outside_br_ix(my_b_ix),
+                end_pos=get_outside_br_ix(eventual_b_dest)
+            )
+            return {
+                'type' : 'h',
+                'h_ix' : quicker_route
+            }
+    ## If the blockers are to the left
     elif to_replace_ixs[0] < my_b_ix:
-        if eventual_direction == "left":
-            return{
+        # if eventual_direction == "left":
+        #     return {
+        #     'type' : 'h',
+        #     'h_ix' : get_outside_br_ix(to_replace_ixs[0]) - 1
+        # }
+        # else:
+        #     R = 'just right'
+        quicker_route = choose_quicker_route(
+            options=[
+                get_outside_br_ix(to_replace_ixs[0]) - 1,
+                get_outside_br_ix(my_b_ix) + 1
+            ],
+            start_pos=get_outside_br_ix(my_b_ix),
+            end_pos=get_outside_br_ix(eventual_b_dest)
+        )
+        return {
             'type' : 'h',
-            'h_ix' : get_outside_br_ix(to_replace_ixs[0]) - 1
+            'h_ix' : quicker_route
         }
-        else:
-            R = 'just right'
     else:
-        if eventual_direction == 'right':
-            return{
+        # if eventual_direction == 'right':
+        #     return {
+        #     'type' : 'h',
+        #     'h_ix' : get_outside_br_ix(to_replace_ixs[0]) + 1
+        # }
+        # else:
+        #     R = 'just left'
+        quicker_route = choose_quicker_route(
+            options=[
+                get_outside_br_ix(to_replace_ixs[0]) + 1,
+                get_outside_br_ix(my_b_ix) - 1
+            ],
+            start_pos=get_outside_br_ix(my_b_ix),
+            end_pos=get_outside_br_ix(eventual_b_dest)
+        )
+        return {
             'type' : 'h',
-            'h_ix' : get_outside_br_ix(to_replace_ixs[0]) + 1
+            'h_ix' : quicker_route
         }
-        else:
-            R = 'just left'
 
-    if R == 'far left':
-        return {
-            'type' : 'h',
-            'h_ix' : 1
-        }
-    if R == 'far right':
-        return {
-            'type' : 'h',
-            'h_ix' : 9
-        }
-    if R == 'just left':
-        return {
-            'type' : 'h',
-            'h_ix' : get_outside_br_ix(my_b_ix) - 1
-        }
-    if R == 'just right':
-        return {
-            'type' : 'h',
-            'h_ix' : get_outside_br_ix(my_b_ix) + 1
-        }
+    # if R == 'far left':
+    #     return {
+    #         'type' : 'h',
+    #         'h_ix' : 1
+    #     }
+    # if R == 'far right':
+    #     return {
+    #         'type' : 'h',
+    #         'h_ix' : 9
+    #     }
+    # if R == 'just left':
+    #     return {
+    #         'type' : 'h',
+    #         'h_ix' : get_outside_br_ix(my_b_ix) - 1
+    #     }
+    # if R == 'just right':
+    #     return {
+    #         'type' : 'h',
+    #         'h_ix' : get_outside_br_ix(my_b_ix) + 1
+    #     }
 
 def get_replace_ixs(my_ix,bedrooms,letter_dict):
     rm = []
@@ -304,8 +405,13 @@ def get_replace_ixs(my_ix,bedrooms,letter_dict):
     return rm
 
 def do_move(from_details,to_details,hallway,bedrooms,moves):
+    FD = {'type': 'b', 'b_ix': 3, 'r_ix': 0, 'source': 'get_blocker_out'}
+    TD = {'type': 'b', 'b_ix': 0, 'r_ix': 0}
+    if (from_details == FD) & (to_details == TD):
+        a=1
     ##### 'b',bedroom_ix,0/1
     ##### 'h',hallway_ix
+    route,r = get_route(from_details,to_details)
     ## Remove the mover from the map
     if from_details['type'] == "b":
         mover = bedrooms[from_details['b_ix']][from_details['r_ix']]
@@ -313,6 +419,15 @@ def do_move(from_details,to_details,hallway,bedrooms,moves):
     elif from_details['type'] == "h":
         mover = hallway[from_details['h_ix']]
         hallway[from_details['h_ix']] = "."
+    ## Move mover into it's destination
+    if to_details['type'] == "h":
+        hallway[to_details['h_ix']] = mover
+    else:
+        bedrooms[to_details['b_ix']][to_details['r_ix']] = mover
+    moves[mover] += len(route)
+    return hallway,bedrooms,moves
+
+def get_route(from_details,to_details):
     ## Travel the route to ensure it's empty
     route = []
     r = []
@@ -346,17 +461,10 @@ def do_move(from_details,to_details,hallway,bedrooms,moves):
         if to_details['r_ix'] == 1:
             route.append(bedrooms[to_details['b_ix']][1])
             r.append(f"b-{to_details['b_ix']}-1")
-    for R,RR in zip(route,r):
-        if R != ".":
-            raise ValueError(f"spot `{RR}` taken")
-    ## Move mover into it's destination
-    if to_details['type'] == "h":
-        hallway[to_details['h_ix']] = mover
-    else:
-        bedrooms[to_details['b_ix']][to_details['r_ix']] = mover
-    moves[mover] += len(route)
-    return hallway,bedrooms,moves
-
+    # for R,RR in zip(route,r):
+    #     if R != ".":
+    #         raise ValueError(f"spot `{RR}` taken")
+    return route,r
 
 starting_moves = [
     [0,0],
@@ -388,9 +496,12 @@ def manage_movement(starting_move,hallway,bedrooms):
             from_details,moves,
             hallway,bedrooms
         ) = move(from_details,hallway,bedrooms,moves,starting_b_ix,i)
+        print(i)
         display(hallway,bedrooms)
         steps.append((hallway,bedrooms))
         i += 1
+        if i > 10:
+            break
     a=1
     return moves
 
