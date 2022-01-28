@@ -1,6 +1,8 @@
 from multiprocessing.sharedctypes import Value
 from operator import ixor
 
+from attr import validate
+
 
 input_str = """
 #############
@@ -76,8 +78,8 @@ def check_bedrooms(bedrooms):
     )
     return "".join(a) != 'ABCDABCD'
 
-def move(from_details,hallway,bedrooms,moves,starting_b_ix,i):
-    if i == 5:
+def move(from_details,hallway,bedrooms,moves,starting_b_ix,i,PRINT):
+    if i == 6:
         a=1
     letter_dict = {
         0 : 'A',
@@ -116,47 +118,123 @@ def move(from_details,hallway,bedrooms,moves,starting_b_ix,i):
     else:
         move_out_the_way = True
     if move_out_the_way:
-        ## Get ixs of the amphipods that I'm getting out the way for
-        to_replace_ixs = get_replace_ixs(from_details['b_ix'],bedrooms,letter_dict)
-        ## If the list is empty, the amphipod referenced in from_details is
-        ##    moving out of the way for the amphipod below it
-        if to_replace_ixs == []:
-            if from_details['r_ix'] == 1:
-                raise ValueError('this shouldnt happen')
-            to_details = get_most_efficient_unblocking(from_details,bedrooms,hallway)
+        if from_details['type'] == 'b':
+            ## Get ixs of the amphipods that I'm getting out the way for
+            to_replace_ixs = get_replace_ixs(from_details['b_ix'],bedrooms,letter_dict)
+            ## If the list is empty, the amphipod referenced in from_details is
+            ##    moving out of the way for the amphipod below it
+            if to_replace_ixs == []:
+                if from_details['r_ix'] == 1:
+                    raise ValueError('this shouldnt happen')
+                to_details = get_most_efficient_unblocking(from_details,bedrooms,hallway)
+            else:
+                ## Work out where to go most efficiently, to not get in the way of their route
+                mover = bedrooms[from_details['b_ix']][from_details['r_ix']]
+                eventual_b_dest = letter_dict_rev[mover]
+                to_details = get_most_efficent_evasion(from_details['b_ix'],to_replace_ixs,eventual_b_dest)
         else:
-            ## Work out where to go most efficiently, to not get in the way of their route
-            mover = bedrooms[from_details['b_ix']][from_details['r_ix']]
-            eventual_b_dest = letter_dict_rev[mover]
-            to_details = get_most_efficent_evasion(from_details['b_ix'],to_replace_ixs,eventual_b_dest)
+            amphipod_letter = hallway[from_details['h_ix']]
+            bix_rix = get_deepest_bedroom(amphipod_letter,letter_dict,bedrooms)
+            if bix_rix:
+                to_details = {
+                    'type' : 'b',
+                    'b_ix' : bix_rix[0],
+                    'r_ix' : bix_rix[1]
+                }
+            else:
+                raise ValueError('logic needed')
+
+
     else:
-        to_details = result
+        route,r = get_route(from_details,result)
+        if validate_route(route,r):
+            to_details = result
+        else:
+            hallway_ixs = [
+                ix
+                for ix,a in enumerate(hallway)
+                if a != "."
+            ]
+            if result['type'] == 'b':
+                destination = get_outside_br_ix(result['b_ix'])
+            else:
+                destination = result['h_ix']
+            if from_details['type'] == 'b':
+                source = get_outside_br_ix(from_details['b_ix'])
+            else:
+                source = from_details['h_ix']
+            if destination < source:
+                desired_direction = 'left'
+            elif source < destination:
+                desired_direction = 'right'
+            else:
+                raise ValueError('investigate')
+            ## If the amphipod eventually wants to get left but there are blockers left, go right one spot
+            if desired_direction == 'left':
+                if len([x for x in hallway_ixs if x < source]) > 0:
+                    to_details = {
+                        'type' : 'h',
+                        'h_ix' : source + 1
+                    }
+                else:
+                    raise ValueError('logic needed')
+            else:
+                raise ValueError('logic needed')
     ## Do the move
     hallway,bedrooms,moves = do_move(from_details,to_details,hallway,bedrooms,moves)
+    if PRINT:    
+        print(i)
+        display(hallway,bedrooms)
+    if i == 1:
+        a=1
     ## Work out the next move
-    if move_out_the_way:
+    ## First check if any hallway amphipods can immediately just slide into their bedroom
+    result0 = fill_bedroom_from_hallway(hallway,bedrooms,letter_dict)
+    if result0:
+        from_details = result0
+    elif move_out_the_way:
         ## First check if there are any empty beds that can be filled by hallway lurkers
         empty_to_be_filled = get_empty_to_be_filled(bedrooms,hallway,letter_dict)
         if empty_to_be_filled:
             from_details = empty_to_be_filled
         else:
-            # if len(to_replace_ixs) == 1:
-            r_ix = get_r_ix(bedrooms,from_details['b_ix'],letter_dict,to_replace_ixs[0])
-            ## If the one we want to move is blocked, move the blocker instead
-            if (r_ix == 1) & (bedrooms[to_replace_ixs[0]][0] != "."):
-                from_details = {
-                    'type' : 'b',
-                    'b_ix' : to_replace_ixs[0],
-                    'r_ix' : 0,
-                    'source' : 'A'
-                }
+            if len(to_replace_ixs) > 0:
+                r_ix = get_r_ix(bedrooms,from_details['b_ix'],letter_dict,to_replace_ixs[0])
+                ## If the one we want to move is blocked, move the blocker instead
+                if (r_ix == 1) & (bedrooms[to_replace_ixs[0]][0] != "."):
+                    from_details = {
+                        'type' : 'b',
+                        'b_ix' : to_replace_ixs[0],
+                        'r_ix' : 0,
+                        'source' : 'A'
+                    }
+                else:
+                    from_details = {
+                        'type' : 'b',
+                        'b_ix' : to_replace_ixs[0],
+                        'r_ix' : r_ix,
+                        'source' : 'B'
+                    }
             else:
-                from_details = {
-                    'type' : 'b',
-                    'b_ix' : to_replace_ixs[0],
-                    'r_ix' : r_ix,
-                    'source' : 'B'
-                }
+                ## Get the amphipods which aren't in the right bedrooms
+                b_ix,r_ix = get_amphipods_in_wrong_bedrooms(bedrooms,letter_dict)
+                hallway_ixs = [
+                    ix
+                    for ix,a in enumerate(hallway)
+                    if a != "."
+                ]
+                hix_of_bedroom = get_outside_br_ix(b_ix)
+                ## If all blockers are to the left
+                if len([x for x in hallway_ixs if x > hix_of_bedroom]) == 0:
+                    ## Go one step right
+                    from_details = {
+                        'type' : 'b',
+                        'b_ix' : b_ix,
+                        'r_ix' : r_ix
+                    }
+                else:
+                    raise ValueError('logic needed')
+
         # else:
         #     ## Decide which one to do next
         #     pass
@@ -175,11 +253,85 @@ def move(from_details,hallway,bedrooms,moves,starting_b_ix,i):
 
     return from_details,moves,hallway,bedrooms
 
+def fill_bedroom_from_hallway(hallway,bedrooms,letter_dict):
+    hallway_ixs = []
+    hallway_vals = []
+    for ix,a in enumerate(hallway):
+        if a != '.':
+            hallway_ixs.append(ix)
+            hallway_vals.append(a)
+    ## Loop through all the hallway amphipods
+    for hi,hv in zip(hallway_ixs,hallway_vals):
+        F = {
+            'type' : 'h',
+            'h_ix' : hi
+        }
+        bix_rix = get_deepest_bedroom(hv,letter_dict,bedrooms)
+        if bix_rix:
+            T = {
+                'type' : 'b',
+                'b_ix' : bix_rix[0],
+                'r_ix' : bix_rix[1]
+            }
+            route,r = get_route(F,T)
+            route_is_valid = validate_route(route,r)
+            if route_is_valid:
+                return F
+
+def get_deepest_bedroom(amphipod_letter,letter_dict,bedrooms):
+    letter_dict_rev = {y:x for x,y in letter_dict.items()}
+    bix = letter_dict_rev[amphipod_letter]
+    for r in [1,0]:
+        if r == 1:
+            if bedrooms[bix][r] == ".":
+                return [bix,r]
+        elif r == 0:
+            if (bedrooms[bix][r] == ".") & (bedrooms[bix][1] == amphipod_letter):
+                return [bix,r]
+    return False
+
+
+def get_amphipods_in_wrong_bedrooms(bedrooms,letter_dict):
+    B = []
+    R = []
+    for b in range(4):
+        for r in range(2):
+            if bedrooms[b][r] != ".":
+                if bedrooms[b][r] != letter_dict[b]:
+                    B.append(b)
+                    R.append(r)
+    if len(B) > 1:
+        raise ValueError('investigate')
+    else:
+        return B[0],R[0]
+
 def get_most_efficient_unblocking(from_details,bedrooms,hallway):
+    letter_dict_rev = {
+        'A' : 0,
+        'B' : 1,
+        'C' : 2,
+        'D' : 3
+    }
     ## Get letter we're unblocking for and work out where it needs to go
-    u = bedrooms[from_details['b_ix']][1]
-    ## Some logic for when they're all to the left
-    
+    # unblocking_for = bedrooms[from_details['b_ix']][1]
+    # uf_desired_direction = "left" if letter_dict_rev[unblocking_for] < from_details['b_ix'] else 'right'
+    ## Some logic for when they're all to the left - prob ignore
+
+    hallway_ixs = [
+        ix
+        for ix,a in enumerate(hallway)
+        if a != "."
+    ]
+    hix_of_bedroom = get_outside_br_ix(from_details['b_ix'])
+    ## If there are blockers to the left
+    if len([x for x in hallway_ixs if x <= hix_of_bedroom]) > 0:
+        ## Move the current amphipod to the left as well
+        return {
+            'type' : 'h',
+            'h_ix' : hix_of_bedroom - 1
+        }
+    else:
+        raise ValueError('logic needed')
     ## Don't write logic for when they're on either side until we have an example
     ## Raise error to catch that example
 
@@ -196,16 +348,58 @@ def get_blocker_out(bedrooms):
             }
     raise ValueError('this shouldnt happen')
 
+def get_top_bedroom(i,bedrooms,typ):
+    if typ == "empty":
+        R = [0,1]
+        A = ["."]
+    else:
+        R = [1,0]
+        A = ["A","B","C","D"]
+    for r in R:
+        if bedrooms[i][r] in A:
+            return r
+    return False
+
+def fill_bedroom_from_bedrooms(hallway,bedrooms,letter_dict):
+    ## Get top empty bedrooms
+    empty_bedrooms = {}
+    for i in range(4):
+        result = get_top_bedroom(i,bedrooms,'empty')
+        if result:
+            empty_bedrooms[i] = result
+    ## Get top full bedrooms
+    full_bedrooms = {}
+    for i in range(4):
+        result = get_top_bedroom(i,bedrooms,'full')
+        if result:
+            full_bedrooms[i] = result
+    ## NOT DONE YET
+
 def get_empty_to_be_filled(bedrooms,hallway,letter_dict):
-    mts = []
+    letter_dict_rev = {
+        x:y
+        for y,x in letter_dict.items()
+    }
+    mts = {}
     for b in range(4):
         for r in [1,0]:
             if bedrooms[b][r] == ".":
-                mts.append(letter_dict[b])
+                # mts.append(letter_dict[b])
+                if letter_dict[b] not in mts:
+                    mts[letter_dict[b]] = [r]
+                else:
+                    mts[letter_dict[b]].append(r)
     move_ix = False
     for ix,c in enumerate(hallway):
         if c in mts:
-            move_ix = ix
+            ## Only set move_ix if r_ix is 1 or r_ix is 0 and the val at r_ix = 2 is in the right spot
+            if 1 in mts[c]:
+                move_ix = ix
+            else:
+                ## Get the val currently with r_ix = 0 in that bedroom
+                b_ix = letter_dict_rev[c]
+                if bedrooms[b_ix][1] == letter_dict[b_ix]:
+                    move_ix = ix
     if move_ix == False:
         return False
     else:
@@ -424,8 +618,15 @@ def do_move(from_details,to_details,hallway,bedrooms,moves):
         hallway[to_details['h_ix']] = mover
     else:
         bedrooms[to_details['b_ix']][to_details['r_ix']] = mover
-    moves[mover] += len(route)
+    moves[mover] += len(route) - 1
     return hallway,bedrooms,moves
+
+def validate_route(route,r):
+    for R,RR in zip(route[1:],r[1:]):
+        if R != ".":
+            # raise ValueError(f"spot `{RR}` taken")
+            return False
+    return True
 
 def get_route(from_details,to_details):
     ## Travel the route to ensure it's empty
@@ -447,14 +648,20 @@ def get_route(from_details,to_details):
     if h_ix < h_ix_dest:
         A = h_ix
         B = h_ix_dest + 1
+        for j in range(A,B):
+            route.append(hallway[j])
+            r.append(f"h{j}")
     elif h_ix > h_ix_dest:
-        A = h_ix_dest
-        B = h_ix + 1
+        # A = h_ix_dest
+        # B = h_ix + 1
+        for j in range(h_ix,h_ix_dest-1,-1):
+            route.append(hallway[j])
+            r.append(f"h{j}")
     else:
         raise IndexError('this shouldnt happen')
-    for j in range(A,B):
-        route.append(hallway[j])
-        r.append(f"h{j}")
+    # for j in range(A,B):
+    #     route.append(hallway[j])
+    #     r.append(f"h{j}")
     if to_details['type'] == "b":
         route.append(bedrooms[to_details['b_ix']][0])
         r.append(f"b-{to_details['b_ix']}-0")
@@ -466,6 +673,13 @@ def get_route(from_details,to_details):
     #         raise ValueError(f"spot `{RR}` taken")
     return route,r
 
+
+def get_total_energy_usage(moves,energy_usage):
+    S = 0
+    for L in ['A','B','C','D']:
+        S += moves[L] * energy_usage[L]
+    return S
+
 starting_moves = [
     [0,0],
     # [0,1],
@@ -476,7 +690,7 @@ starting_moves = [
     [3,0],
     # [3,1],
 ]
-def manage_movement(starting_move,hallway,bedrooms):
+def manage_movement(starting_move,hallway,bedrooms,PRINT=False):
     moves = {
         'A' : 0,
         'B' : 0,
@@ -495,14 +709,22 @@ def manage_movement(starting_move,hallway,bedrooms):
         (
             from_details,moves,
             hallway,bedrooms
-        ) = move(from_details,hallway,bedrooms,moves,starting_b_ix,i)
-        print(i)
-        display(hallway,bedrooms)
+        ) = move(from_details,hallway,bedrooms,moves,starting_b_ix,i,PRINT)
+
         steps.append((hallway,bedrooms))
         i += 1
+        # total_energy_usage = get_total_energy_usage(moves,energy_usage)
+        # print(total_energy_usage)
         if i > 10:
             break
     a=1
     return moves
 
-moves = manage_movement(starting_moves[2],hallway,bedrooms)
+moves = manage_movement(starting_moves[2],hallway,bedrooms,True)
+total_energy_usage = get_total_energy_usage(moves,energy_usage)
+print(total_energy_usage)
+
+# for i in range(4):
+#     moves = manage_movement(starting_moves[i],hallway,bedrooms)
+#     total_energy_usage = get_total_energy_usage(moves,energy_usage)
+#     print(total_energy_usage)
